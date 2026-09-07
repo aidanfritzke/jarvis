@@ -10,4 +10,4 @@ The brain is a local model running on CPU.
  Desk  ┘─Tailscale─▶ caddy ─▶ jarvis-agent ─┼─ ollama        (local brain, internal-only)
  (ingress: tailscale IP only)               ├─ searxng       (web egress; no secrets/notes)
                                             └─ /srv/notes     (vault; writes to inbox/ or to todo/)
-``'
+```
