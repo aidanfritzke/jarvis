@@ -1,0 +1,31 @@
+# Local config + runtime state
+config.yaml
+data/
+.env
+
+# Secrets — never commit. VAPID keys, Google client/token JSON live here.
+secrets/
+*.pem
+*.key
+google_client.json
+google_token.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.part
+
+# Local editor / tooling state
+.claude/settings.local.json
+
+# most things
+ARCHITECTURE.md
+config.example.yaml
+DEPLOY.md
+docker-compose.yml
+requirements.txt
+SECURITY.md
+caddy/
+docker/
+searxng/
