@@ -274,7 +274,8 @@ def grade(g, run, judge_cfg, votes):
             result.update(passed=b is not None and a is not None and b < a, explanation="%s before %s" % (b, a))
         elif kind == "llm":
             subject = subject_of(g.get("focus"), run)
-            passed, verdicts = judge(g["criteria"], subject or "", judge_cfg, votes)
+            criteria = g["criteria"].replace("/comments-by-humans:", "/")  # the agent's command names
+            passed, verdicts = judge(criteria, subject or "", judge_cfg, votes)
             result.update(passed=passed, explanation="judge votes: " + " ".join(verdicts))
         else:
             result.update(passed=False, scored=False, explanation="grader type %r is not supported" % kind)

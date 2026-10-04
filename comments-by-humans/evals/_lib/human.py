@@ -1,6 +1,7 @@
 """What the human does in their editor: type an explanation into a placeholder."""
 
 import os
+import re
 import sys
 
 PLUGIN = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,8 +23,25 @@ def wrap(text, width=88):
     return out
 
 
+_PREFIX = re.compile(r"^\s*(#+|//+|--+|;+|\*+|/\*+|\*/|<!--|-->)\s?")
+
+
+def plain(text):
+    """Comment text as prose: no comment syntax, no marker lines (model learners add both)."""
+    lines = []
+    for line in text.strip().split("\n"):
+        if comments.MARKER_RE.search(line):
+            continue
+        prev = None
+        while prev != line:
+            prev, line = line, _PREFIX.sub("", line, count=1)
+        lines.append(line.rstrip())
+    return "\n".join(lines).strip()
+
+
 def fill_comment(repo, rel, cid, text):
     """Replace the body of chunk `cid`'s comment block with `text`."""
+    text = plain(text)
     path = os.path.join(repo, rel)
     with open(path) as f:
         lines = f.read().split("\n")

@@ -361,6 +361,12 @@ class TestEvalRunner(unittest.TestCase):
             {"name": "write_file", "args": {"path": "a.py", "content": "x"}}, "/r"),
             ("Write", {"file_path": "/r/a.py", "content": "x"}))
 
+    def test_scripted_human_types_plain_prose(self):
+        sys.path.insert(0, os.path.join(PLUGIN, "evals", "_lib"))
+        import human
+        self.assertEqual(human.plain("# # Counts words.\n# EXPLAINED(human) c02\n// it splits\n * on spaces"),
+                         "Counts words.\nit splits\non spaces")
+
     def test_yaml_subset(self):
         import run_evals
         self.assertEqual(run_evals.parse_yaml("a: 1\nb:\n  c: 'x''y'\n  d: [p, \"q\"]\ne: { f: g, h: true }\n"),

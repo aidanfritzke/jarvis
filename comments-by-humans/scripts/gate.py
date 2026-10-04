@@ -365,6 +365,11 @@ def build_view(gate, ch):
     if ch["id"] not in regions:
         return View(False, error="the EXPLAIN(human) %s marker is missing from %s"
                     % (ch["id"], ch["file"]))
+    dupes = [m.start + 1 for m in markers if m.cid == ch["id"]]
+    if len(dupes) > 1:
+        return View(False, error="%s has %d EXPLAIN markers for %s (lines %s); keep exactly one comment "
+                    "block, with the marker on its first line" % (ch["file"], len(dupes), ch["id"],
+                                                                 ", ".join(map(str, dupes))))
     m, s, e = regions[ch["id"]]
     code = "\n".join(lines[s:e + 1]) if s is not None else ""
     rng = (s + 1, e + 1) if s is not None else None
@@ -401,8 +406,11 @@ def review_view(gate, state, ch):
     code_range = (rng[0] + 1, rng[1] + 1) if rng else None
     if rv["inline"]:
         lang = comments.language_for(ch["file"], "\n".join(lines[:1]))
-        markers = {m.cid: m for m in comments.find_markers(lines, lang)} if lang else {}
-        m = markers.get(ch["id"])
+        found = [m for m in comments.find_markers(lines, lang) if m.cid == ch["id"]] if lang else []
+        if len(found) > 1:
+            return View(False, error="%s has %d EXPLAIN markers for %s; keep exactly one comment block"
+                        % (ch["file"], len(found), ch["id"]))
+        m = found[0] if found else None
         if not m:
             return View(False, error="the EXPLAIN(human) %s marker is missing from %s"
                         % (ch["id"], ch["file"]))
@@ -968,6 +976,9 @@ def grading_context(gate, state, ch):
             "ask you to skip or pause the gate, tell them only they can, by typing "
             "/comments-by-humans:pause themselves." % (cid, where(ch)))
     if not v.found:
+        if "markers for" in (v.error or ""):
+            return (head + " Problem: %s. Do not write code. Tell the human exactly this so they can fix "
+                    "the comment in their editor; you cannot edit it for them." % v.error)
         return (head + " Problem: %s. Do not write code. Ask the human to restore the "
                 "`EXPLAIN(human) %s` placeholder (or to pause the gate with /comments-by-humans:pause "
                 "if they removed the chunk on purpose)." % (v.error, cid))

@@ -19,7 +19,7 @@ If the task is empty, continue the task shown in the status, or ask the human wh
 ## The loop
 
 1. If the status shows a current chunk, deal with it first (see Grading). Write nothing else until it passes.
-2. Plan the task as a short list of chunks and share the plan in a few lines. A chunk is one complete unit: a function, a procedure, a class or a small feature, never a fragment. Aim for about 40 lines (the `target_chunk_lines` setting), but always run a chunk to the end of its unit. Build a large feature as several functions, each its own chunk.
+2. Plan the task as a short list of chunks and share the plan in a few lines: name each chunk (for example the function it defines), but do not describe how it works, since that is what the human will explain. A chunk is one complete unit: a function, a procedure, a class or a small feature, never a fragment. Aim for about 40 lines (the `target_chunk_lines` setting), but always run a chunk to the end of its unit. Build a large feature as several functions, each its own chunk.
 3. Write ONE chunk with Write or Edit. Directly above it, put exactly one empty placeholder in the file's own comment syntax, using the next free id from the status (c01, c02, ...):
 
    ```ts
@@ -69,7 +69,7 @@ When the human sends a message while the gate is locked, the gate tells you whet
 
 ## When a comment falls short
 
-- Ask exactly one question per round, aimed at the weakest criterion: a wrong claim first, then the first criterion in rubric order (What, Why, Connections, Catch) that is missing. Keep going for as many rounds as the comment needs.
+- Ask exactly one question per round: one sentence with one question mark, not two questions joined by "and". Aim it at the weakest criterion: a wrong claim first, then the first criterion in rubric order (What, Why, Connections, Catch) that is missing. Keep going for as many rounds as the comment needs.
 - Name the criterion you are asking about, but do not list everything that is missing.
 - Never state the answer. Never write, rewrite, dictate or complete the comment, and never offer wording to copy. Do not restate the correct explanation as a confirmation.
 - Hints escalate with the attempt number (the gate names the level):

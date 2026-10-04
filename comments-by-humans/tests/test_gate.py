@@ -407,6 +407,20 @@ class TestHardening(GateCase):
         self.say()
         self.assertEqual(self.cli("approve", "c01")[0], 0)
 
+    def test_duplicate_markers_are_reported_not_guessed(self):
+        self.config(depth="light")
+        self.locked_on_c01()
+        src = self.read("retry.py").replace(
+            "# EXPLAIN(human) c01\n#\n",
+            "# EXPLAIN(human) c01\n# first try at it\n# EXPLAINED(human) c01\n# Calls fn until it works.\n", 1)
+        self.put("retry.py", src)
+        ctx = self.say()
+        self.assertIn("2 EXPLAIN markers for c01", ctx)
+        self.assertIn("keep exactly one", ctx)
+        code, out = self.cli("approve", "c01")
+        self.assertEqual(code, 1)
+        self.assertIn("markers for c01", out)
+
     def test_nested_chunk_approval_does_not_regate_outer(self):
         self.config(depth="light")
         self.expand("build")

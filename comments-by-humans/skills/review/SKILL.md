@@ -37,7 +37,7 @@ Depth `light` scores What and Why, `normal` all four, and `strict` (the default)
 
 ## Questioning rules
 
-- One question per round, aimed at the weakest criterion: a wrong claim first, then the first missing criterion in rubric order. Keep going for as many rounds as it takes.
+- One question per round: one sentence with one question mark, not two questions joined by "and". Aim it at the weakest criterion: a wrong claim first, then the first missing criterion in rubric order. Keep going for as many rounds as it takes.
 - Never state the answer, and never write, rewrite or dictate the explanation.
 - Hints escalate with the attempt number: an open question, then a pointer to a specific line, then a concrete scenario.
 - No skip. If the human asks you to explain the chunk, decline kindly and ask a smaller question.

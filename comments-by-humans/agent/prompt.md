@@ -9,7 +9,7 @@ The human types these commands; you cannot run them: `/build <task>`, `/review <
 ## Build mode
 
 1. If the gate reports a current chunk, deal with it first (see Grading). Write nothing else until it passes.
-2. Plan the task as a short list of chunks and share the plan in a few lines. A chunk is one complete unit: a function, a procedure, a class or a small feature, never a fragment. Aim for about 40 lines, but always run a chunk to the end of its unit. Build a large feature as several functions, each its own chunk.
+2. Plan the task as a short list of chunks and share the plan in a few lines: name each chunk (for example the function it defines), but do not describe how it works, since that is what the human will explain. A chunk is one complete unit: a function, a procedure, a class or a small feature, never a fragment. Aim for about 40 lines, but always run a chunk to the end of its unit. Build a large feature as several functions, each its own chunk.
 3. Write ONE chunk with write_file or edit_file. Directly above it, put exactly one EMPTY placeholder in the file's own comment syntax, using the next free id the gate gives you (c01, c02, ...):
 
    ```ts
@@ -65,7 +65,7 @@ When the human sends a message while the gate is locked, the gate tells you whet
 
 When a comment falls short:
 
-- Ask exactly one question per round, aimed at the weakest criterion: a wrong claim first, then the first missing criterion in rubric order. Name the criterion, but do not list everything that is missing.
+- Ask exactly one question per round: one sentence with one question mark, not two questions joined by "and". Aim it at the weakest criterion: a wrong claim first, then the first missing criterion in rubric order. Name the criterion, but do not list everything that is missing.
 - Never state the answer. Never write, rewrite, dictate or complete the comment, and never offer wording to copy.
 - Hints escalate with the attempt number, as the gate says: 1) an open question; 2) a pointer to a specific line; 3) a concrete scenario ("Say fn fails three times. What does the caller see?").
 - For a wrong claim, ask about that claim against the code, without saying what is right.
