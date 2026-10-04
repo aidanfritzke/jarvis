@@ -82,6 +82,31 @@ def claude(args, prompt, cwd, timeout=900):
     return result
 
 
+class AgentSession:
+    """The model-agnostic agent (../../agent) in-process, with any provider."""
+
+    def __init__(self, repo, args):
+        sys.path.insert(0, os.path.join(PLUGIN, "agent"))
+        import cbh
+        self.id = "agent"
+        self.cost = 0.0
+        self.tool_calls = []
+        cfg = cbh.settings(args)
+        self.agent = cbh.build_agent(argparse.Namespace(project=repo), cfg,
+                                     approve=lambda command: bool(re.match(r"^python3?\s", command)))
+
+    def send(self, message):
+        message = message.replace("/comments-by-humans:", "/")
+        before = len(self.agent.events)
+        out = self.agent.send(message)
+        self.tool_calls.append([e["data"] for e in self.agent.events[before:] if e["kind"] == "tool"])
+        return out
+
+
+def new_session(repo, args):
+    return AgentSession(repo, args) if args.frontend == "agent" else Session(repo, args.model)
+
+
 class Session:
     def __init__(self, repo, model=None):
         self.repo = repo
@@ -201,15 +226,19 @@ You cannot run commands or open other files; if asked to check something, reason
 above and say what you concluded."""
 
 
-def learner(profile, ch, code, comment, message, submitted, model, setup=BUILD_SETUP):
+def learner(profile, ch, code, comment, message, submitted, model, setup=BUILD_SETUP, command=None):
     prompt = LEARNER_PROMPT.format(setup=setup, profile=profile, cid=ch["id"], attempt=submitted + 1,
                                    submitted=submitted, code=code,
                                    comment=json.dumps(comment or ""), message=message.strip())
     last_error = None
     for _ in range(3):
-        with tempfile.TemporaryDirectory() as scratch:
-            data = claude(["--tools", "", "--model", model], prompt, scratch, timeout=300)
-        text = (data.get("result") or "").strip()
+        if command:  # any command-line model: prompt on stdin, reply on stdout
+            out = subprocess.run(command, shell=True, input=prompt, capture_output=True, text=True, timeout=300)
+            text = out.stdout.strip()
+        else:
+            with tempfile.TemporaryDirectory() as scratch:
+                data = claude(["--tools", "", "--model", model], prompt, scratch, timeout=300)
+            text = (data.get("result") or "").strip()
         text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
         m = re.search(r"\{.*\}", text, re.S)
         try:
@@ -240,7 +269,7 @@ def run_review(args, profile):
         os.makedirs(os.path.join(repo, ".comments-by-humans"), exist_ok=True)
         with open(os.path.join(repo, ".comments-by-humans", "config.json"), "w") as f:
             json.dump({"depth": args.depth}, f)
-    session = Session(repo, args.model)
+    session = new_session(repo, args)
     transcript, written, submissions = [], {}, {}
     first = "/comments-by-humans:review " + args.review
     message = session.send(first)
@@ -261,7 +290,7 @@ def run_review(args, profile):
             continue
         body, code = review_view(repo, state, ch)
         comment, reply = learner(profile["instructions"], ch, code, body, message,
-                                 submissions.get(cid, 0), args.learner_model, REVIEW_SETUP)
+                                 submissions.get(cid, 0), args.learner_model, REVIEW_SETUP, args.learner_command)
         if comment and comment.strip() != (body or "").strip():
             fill_review(repo, state, ch, comment)
             written[cid] = comment.strip()
@@ -318,7 +347,7 @@ def run(args):
         os.makedirs(os.path.join(repo, ".comments-by-humans"), exist_ok=True)
         with open(os.path.join(repo, ".comments-by-humans", "config.json"), "w") as f:
             json.dump({"depth": args.depth}, f)
-    session = Session(repo, args.model)
+    session = new_session(repo, args)
     transcript = []
     written = {}      # chunk id -> the learner's latest comment text
     submissions = {}  # chunk id -> number of comment versions the learner wrote
@@ -342,7 +371,8 @@ def run(args):
         idle = 0
         marker, code = chunk_view(repo, ch)
         comment, reply = learner(profile["instructions"], ch, code, marker.body, message,
-                                 submissions.get(ch["id"], 0), args.learner_model)
+                                 submissions.get(ch["id"], 0), args.learner_model,
+                                 command=args.learner_command)
         if comment and comment.strip() != (marker.body or "").strip():
             fill_comment(repo, ch, comment)
             written[ch["id"]] = comment.strip()
@@ -399,12 +429,19 @@ def main():
     ap.add_argument("--expect-chunks", type=int, default=1)
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--depth", choices=("light", "normal", "strict"))
-    ap.add_argument("--model", help="model for the session under test")
     ap.add_argument("--learner-model", default="haiku")
+    ap.add_argument("--learner-command", help="any command-line model for the learner, instead of claude")
     ap.add_argument("--workdir")
     ap.add_argument("--out")
+    ap.add_argument("--frontend", choices=("claude-code", "agent"), default="claude-code",
+                    help="drive the Claude Code plugin, or the model-agnostic agent")
+    sys.path.insert(0, os.path.join(PLUGIN, "agent"))
+    import cbh
+    agent_args = ap.add_argument_group("agent frontend (same flags as agent/cbh.py)")
+    cbh.add_provider_args(agent_args)
     args = ap.parse_args()
-    if not shutil.which("claude"):
+    needs_claude = args.frontend == "claude-code" or not args.learner_command
+    if needs_claude and not shutil.which("claude"):
         sys.exit("the claude CLI is not on PATH")
     started = time.time()
     result = run(args)

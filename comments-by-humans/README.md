@@ -1,25 +1,69 @@
 # comments-by-humans
 
-Claude writes the code. You explain it.
+The model writes the code. You explain it.
 
-comments-by-humans is a Claude Code plugin that stops Claude after every chunk of code it writes until you have explained that chunk, in your own words, in a comment above it. Claude grades your comment against a fixed rubric and, when it falls short, asks one question at a time until it passes, without ever giving you the answer. The stop is enforced by hooks, not by a prompt: while a comment is pending, Claude's Write, Edit and Bash calls are denied.
+comments-by-humans stops an AI coding assistant after every chunk of code it writes until you have explained that chunk, in your own words, in a comment above it. The assistant grades your comment against a fixed rubric and, when it falls short, asks one question at a time until it passes, without ever giving you the answer. The stop is enforced mechanically, not by a prompt: while a comment is pending, the assistant's write and shell tools are denied.
 
 The same loop pointed at existing code is a review tool: the gate walks a path or a diff one chunk at a time, in construction order, and writes a review report.
 
-Requires Claude Code and Python 3, nothing else. Tested with Claude Code 2.1.289 and Python 3.11.
+It runs two ways, on one gate engine (`scripts/gate.py`):
+
+| Front end | Models | Enforced by |
+| --- | --- | --- |
+| **Claude Code plugin** | Whatever model Claude Code runs | Claude Code hooks |
+| **Standalone agent** (`agent/cbh.py`) | Any model: Anthropic, OpenAI, Gemini, Ollama, OpenRouter, Groq, Mistral, DeepSeek, xAI, Together, LM Studio, vLLM, any OpenAI-compatible server, or any command-line model | The agent's own tool layer |
+
+Requires Python 3 and nothing else; the Claude Code front end also needs Claude Code. Tested with Claude Code 2.1.289 and Python 3.11.
 
 ## Install
+
+**Claude Code:**
 
 ```
 /plugin marketplace add aidanfritzke/jarvis
 /plugin install comments-by-humans@jarvis
 ```
 
-To install from a branch, pin it: `/plugin marketplace add aidanfritzke/jarvis#jarvis-comments-by-humans`. From a shell, the same commands are `claude plugin marketplace add ...` and `claude plugin install ...`.
+To install from a branch, pin it: `/plugin marketplace add aidanfritzke/jarvis#jarvis-comments-by-humans-model-agnostic`. From a shell, the same commands are `claude plugin marketplace add ...` and `claude plugin install ...`.
 
-Then add `.comments-by-humans/` to your project's `.gitignore`. The plugin suggests this but never edits the file itself.
+**Any other model:** clone this repository (or copy its `comments-by-humans/` directory) and run `python3 comments-by-humans/agent/cbh.py`. Nothing to install.
 
-## Use
+Either way, add `.comments-by-humans/` to your project's `.gitignore`. The gate suggests this but never edits the file itself.
+
+## Use it with any model
+
+The standalone agent is a small coding agent whose only way to touch your project is a set of tools that run the gate's checks: `read_file`, `list_files`, `search`, `write_file`, `edit_file`, `run_command` and `gate`. There is no pause tool, so only you can pause. It has no dependencies beyond Python 3.
+
+```
+python3 comments-by-humans/agent/cbh.py --provider anthropic build "add a retry helper"
+python3 comments-by-humans/agent/cbh.py --provider openai --model <model> review src/
+python3 comments-by-humans/agent/cbh.py --provider ollama --model <model>
+python3 comments-by-humans/agent/cbh.py --provider command --command "llm -m <model>"
+```
+
+With no action it opens an interactive session in the current directory (`--project` to change it). Type `/build <task>`, `/review <target> [--inline]`, `/pause`, `/status`, `/edit` (opens your `$EDITOR` at the waiting placeholder), `/help` or `/quit`.
+
+| Provider | Endpoint | Key from |
+| --- | --- | --- |
+| `anthropic` | Anthropic Messages API; defaults to `claude-opus-5-5` | `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` |
+| `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| `gemini` | Gemini's OpenAI-compatible endpoint | `GEMINI_API_KEY` |
+| `openrouter`, `groq`, `mistral`, `deepseek`, `xai`, `together` | Each service's OpenAI-compatible endpoint | `<NAME>_API_KEY` |
+| `ollama`, `lmstudio` | `localhost:11434/v1`, `localhost:1234/v1` | none |
+| `openai-compatible` | Any Chat Completions server, with `--base-url` | `OPENAI_API_KEY` if set |
+| `command` | Any command that reads a transcript on stdin and prints the reply | the command's own |
+
+- **Models:** every provider except `anthropic` needs `--model`; the agent does not guess model names.
+- **Overrides:** `--base-url` and `--api-key-env` override a preset.
+- **Settings:** settings also come from `CBH_PROVIDER`, `CBH_MODEL`, `CBH_BASE_URL`, `CBH_COMMAND` and the other `CBH_*` variables, or from `~/.config/comments-by-humans/agent.json` with the same keys.
+- **Tool calling:** models with native tool calling use it. For models without it, and always for `--provider command`, the agent uses a plain-text tool protocol (`--tool-mode text`) in which the model writes `<tool name="write_file" path="...">...</tool>` blocks.
+- **Shell commands:** `run_command` asks before running a shell command unless you pass `--yes`.
+- **Anthropic API settings:** on the Anthropic API, the agent sends effort `high` for current models (`--effort`). It also opts into server-side refusal fallback for Claude Opus 5, Opus 5.5, Sonnet 5.5 and Fable 5.1 (`--no-fallbacks` to turn it off).
+- **History:** history is append-only, as current reasoning models require.
+
+The agent and the plugin share the gate, the state in `.comments-by-humans/`, the rubric and the review reports, so you can switch between them on the same project.
+
+## Use it in Claude Code
 
 | Command | What it does |
 | --- | --- |
@@ -64,7 +108,7 @@ The code is on disk, so nothing stops you reading ahead. The gate governs the re
 
 ## How the gate is enforced
 
-Six hook entries call one script, `scripts/gate.py`. It reads `.comments-by-humans/state.json` and exits at once when the mode is off.
+In Claude Code, six hook entries call one script, `scripts/gate.py`. It reads `.comments-by-humans/state.json` and exits at once when the mode is off. The standalone agent calls the same checks through `gate.py`'s library API (`api_pre_tool`, `api_post_tool`, `api_prompt`, `api_command`, `api_cli`) before and after each of its own tools, with the same results.
 
 | Hook | Job |
 | --- | --- |
@@ -110,11 +154,12 @@ To remove the gate from a project entirely, delete `.comments-by-humans/` yourse
 
 ## Limits
 
-- **Grading can be lenient.** The hooks guarantee that a comment exists and that you submitted it; only Claude judges whether it is good. The rubric is fixed, strict depth adds a live follow-up, and the eval suite below checks that weak and wrong comments are rejected.
+- **Grading can be lenient, and it varies by model.** The gate guarantees that a comment exists and that you submitted it; only the model judges whether it is good. The rubric is fixed and strict depth adds a live follow-up. Run the eval suite below against the model you plan to use: it checks that weak and wrong comments are rejected.
 - **Chunk extents are heuristic.** A chunk runs from its placeholder through the first statement below it, everything nested inside it, and any line glued to it without a blank line. This works across brace and indentation languages without a parser, but unusual layouts can make a chunk larger or smaller than intended.
 - **Shell writes are caught heuristically.** While unlocked, the Bash hook blocks redirects, `tee`, in-place `sed`/`perl`, copies and patches into source files. A determined script could still write a file in a way the heuristic misses. While locked, every command except the gate CLI is denied.
 - **Unknown file types are not gated.** Files whose comment syntax the plugin does not know are written freely and logged as ungated. Notebook edits are logged the same way.
-- **Your own edits are yours.** Hooks govern Claude, not you. If you change a chunk's code while it is locked, approval refuses until you run `/comments-by-humans:build` (or `review`) to accept the new code.
+- **Your own edits are yours.** The gate governs the assistant, not you. If you change a chunk's code while it is locked, approval refuses until you run build (or review) again to accept the new code.
+- **The standalone agent is deliberately small.** It has seven tools, no subagents, no MCP, no web access and no context compaction, so very long sessions can outgrow a small model's context window. Start a new session when that happens; the gate's state carries over.
 
 ## Development
 
@@ -124,10 +169,18 @@ comments-by-humans/
 ├── skills/                    build, review, pause, status
 ├── hooks/hooks.json
 ├── scripts/
-│   ├── gate.py                hook entry points, state machine, gate CLI
+│   ├── gate.py                gate engine: state machine, Claude Code hook entry points, gate CLI,
+│   │                          and the library API the agent calls
 │   └── comments.py            comment syntax per language, markers, chunk extents, review chunker
+├── agent/                     the model-agnostic front end
+│   ├── cbh.py                 command line and interactive session
+│   ├── harness.py             agent loop, gated tools, text tool protocol
+│   ├── providers.py           anthropic, openai-compatible and command providers, presets
+│   ├── prompt.md              the system prompt: build, review, rubric, questioning rules
+│   └── run_evals.py           runs evals/ cases against the agent with any provider
 ├── tests/
 │   ├── test_gate.py           every hook driven with real-shaped payloads (no model calls)
+│   ├── test_agent.py          the agent with scripted models and mock provider servers
 │   └── install_test.sh        install into a clean Claude Code home and prove the lock holds
 └── evals/
     ├── <case>/                claude plugin eval cases: scripted weak, wrong and good comments,
@@ -142,18 +195,27 @@ Deterministic tests:
 python3 -m unittest discover -s comments-by-humans/tests -v
 ```
 
-Model-graded evals (they call the model and need the OS sandbox for Bash; on Linux install `bubblewrap` and `socat`):
+Model-graded evals. For the Claude Code plugin (needs the OS sandbox for Bash; on Linux install `bubblewrap` and `socat`):
 
 ```
 claude plugin eval ./comments-by-humans --scaffold --allow-tools "Bash(python3 *)" Write Edit
 ```
 
-End-to-end runs with a scripted learner (each costs real model calls):
+The same cases against the standalone agent, with any provider and any judge model:
+
+```
+python3 comments-by-humans/agent/run_evals.py --provider openai --model <model> --runs 3
+python3 comments-by-humans/agent/run_evals.py --provider ollama --model <model> --judge-provider anthropic
+```
+
+End-to-end runs with a scripted learner (each costs real model calls). `--frontend agent` drives the standalone agent with the provider flags above, and `--learner-command` lets any command-line model play the learner:
 
 ```
 python3 comments-by-humans/evals/learner/drive.py --profile weak-first --expect-chunks 5 \
   --task "Create textstats.py with five functions, each its own chunk: ..."
 python3 comments-by-humans/evals/learner/drive.py --profile diligent --review src/ --workdir path/to/repo
+python3 comments-by-humans/evals/learner/drive.py --frontend agent --provider openai --model <model> \
+  --learner-command "llm -m <model>" --profile wrong-first --expect-chunks 3 --task "..."
 ```
 
 Profiles live in `evals/learner/profiles.json`: `diligent`, `weak-first`, `wrong-first` and `pleads`.

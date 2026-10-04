@@ -19,6 +19,8 @@ import time
 PLUGIN = "comments-by-humans"
 STATE_DIR = ".comments-by-humans"
 SCRIPT = os.path.realpath(os.path.abspath(__file__))
+if os.path.dirname(SCRIPT) not in sys.path:
+    sys.path.insert(0, os.path.dirname(SCRIPT))
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(SCRIPT))
 GATE = 'python3 "%s"' % SCRIPT
 
@@ -54,7 +56,11 @@ RUBRIC = {
 
 
 class Refusal(Exception):
-    """A CLI request the gate refuses. The message goes back to Claude."""
+    """A CLI request the gate refuses. The message goes back to the assistant."""
+
+
+class Denied(Exception):
+    """A hook decision that blocks the action. The message explains why."""
 
 
 # ---------------------------------------------------------------------------
@@ -440,8 +446,7 @@ def report_block(text, cid):
 
 
 def hook_deny(reason):
-    sys.stderr.write(reason.rstrip() + "\n")
-    sys.exit(2)
+    raise Denied(reason.rstrip())
 
 
 def emit(obj):
@@ -532,7 +537,7 @@ def hook_pre_write(gate, state, payload):
         if (is_locked(state) or mode == "review") and _MCP_WRITE.search(name):
             if is_locked(state):
                 hook_deny(locked_message(LOCKED_WRITE, state) + " (MCP write tools included.)")
-            hook_deny("comments-by-humans: review mode — Claude writes no code, so %s is denied." % tool)
+            hook_deny("comments-by-humans: review mode — the assistant writes no code, so %s is denied." % tool)
         if mode == "build" and _MCP_FILE_WRITE.search(name):
             hook_deny("comments-by-humans: write code with Write or Edit, not %s, so the gate can check "
                       "its EXPLAIN(human) placeholder." % tool)
@@ -540,12 +545,12 @@ def hook_pre_write(gate, state, payload):
 
     path = tool_path(payload)
     if path and protected(gate, path):
-        hook_deny("comments-by-humans: %s is protected while the gate is on. Claude may not edit the "
-                  "gate's state, the plugin, or Claude Code settings." % path)
+        hook_deny("comments-by-humans: %s is protected while the gate is on. The assistant may not edit "
+                  "the gate's state, the plugin, or the agent's settings." % path)
     if mode == "paused":
         return
     if mode == "review":
-        hook_deny("comments-by-humans: review mode — Claude writes no code. Present chunks and grade "
+        hook_deny("comments-by-humans: review mode — the assistant writes no code. Present chunks and grade "
                   "the human's explanations; the gate script writes the report.")
     if is_locked(state):
         hook_deny(locked_message(LOCKED_WRITE, state))
@@ -605,7 +610,7 @@ def check_build_write(state, rel, lang, old_text, new_text):
             problems.append("%s is marked EXPLAINED; new placeholders say EXPLAIN(human) and only the "
                             "gate marks a chunk explained" % m.cid)
         if m.body:
-            problems.append("the placeholder for %s is not empty; Claude never writes the explanation, "
+            problems.append("the placeholder for %s is not empty; the assistant never writes the explanation, "
                             "the human does" % m.cid)
     if len(added) > 1:
         problems.append("this write adds %d placeholders (%s); write one chunk at a time"
@@ -753,7 +758,7 @@ def hook_post_write(gate, state, payload):
            "placeholder at %s:%d, then save the file and send any message. Do not explain the chunk, "
            "summarize it, or suggest wording." % (" ".join(parts), cur["id"], cur["id"], cur["file"],
                                                  cur["lines"][0]))
-    emit({"decision": "block", "reason": msg})
+    return msg
 
 
 # ---------------------------------------------------------------------------
@@ -820,8 +825,8 @@ def hook_pre_bash(gate, state, payload):
         return
     if STATE_DIR in cmd or PLUGIN_ROOT in cmd or _PLUGIN_OFF.search(cmd) or (
             _SETTINGS.search(cmd) and _WRITE_VERB.search(cmd)):
-        hook_deny("comments-by-humans: this command touches the gate's state, the plugin or Claude "
-                  "Code settings, which are protected while the gate is on. Use `%s status` to read "
+        hook_deny("comments-by-humans: this command touches the gate's state, the plugin or the "
+                  "agent's settings, which are protected while the gate is on. Use `%s status` to read "
                   "the gate." % GATE)
     mode = state["mode"]
     if mode == "paused":
@@ -831,7 +836,7 @@ def hook_pre_bash(gate, state, payload):
     cfg = gate.config()
     reason = bash_writes_code(gate, cmd, cfg)
     if reason and mode == "review":
-        hook_deny("comments-by-humans: review mode — Claude writes no code, and this command %s." % reason)
+        hook_deny("comments-by-humans: review mode — the assistant writes no code, and this command %s." % reason)
     if reason and mode == "build":
         hook_deny("comments-by-humans: this command %s. Write code with Write or Edit so the gate can "
                   "check its EXPLAIN(human) placeholder." % reason)
@@ -886,7 +891,7 @@ def run_command(gate, state, cmd, args, by):
     return None, True
 
 
-def hook_prompt_expansion(payload):
+def hook_prompt_expansion(payload, start=None):
     name = payload.get("command_name") or ""
     if not name.startswith(PLUGIN + ":"):
         return
@@ -896,7 +901,7 @@ def hook_prompt_expansion(payload):
     args = payload.get("command_args") or ""
     if isinstance(args, list):
         args = " ".join(str(a) for a in args)
-    start = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
+    start = start or os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
     root = find_root(start, create=cmd in ("build", "review"))
     if not root:
         return
@@ -908,8 +913,7 @@ def hook_prompt_expansion(payload):
         gate.save(state)
     if not ok:
         hook_deny(text)
-    if text:
-        sys.stdout.write(text + "\n")
+    return text
 
 
 _TYPED = re.compile(r"^\s*/%s:(build|review|pause|status)\b(.*)$" % re.escape(PLUGIN), re.S)
@@ -919,9 +923,9 @@ _TYPED = re.compile(r"^\s*/%s:(build|review|pause|status)\b(.*)$" % re.escape(PL
 # Hook: UserPromptSubmit
 
 
-def hook_prompt_submit(payload):
+def hook_prompt_submit(payload, start=None):
     prompt = payload.get("prompt") or payload.get("prompt_text") or ""
-    start = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
+    start = start or os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
     typed = _TYPED.match(prompt)
     root = find_root(start, create=bool(typed and typed.group(1) in ("build", "review")))
     if not root:
@@ -950,9 +954,7 @@ def hook_prompt_submit(payload):
         if ch:
             context.append(grading_context(gate, state, ch))
         gate.save(state)
-    if context:
-        emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                     "additionalContext": "\n\n".join(context)}})
+    return "\n\n".join(context) if context else None
 
 
 def grading_context(gate, state, ch):
@@ -1335,7 +1337,7 @@ def start_review(gate, state, args, by):
     gate.log("review_started", review=rid, targets=targets, chunks=len(order), inline=inline, by=by)
     present(gate, state, chunks[order[0]])
     return ("comments-by-humans: review %s started: %d chunk%s in construction order (dependencies "
-            "first, entry points last). Claude writes no code in review mode.%s %s%s"
+            "first, entry points last). The assistant writes no code in review mode.%s %s%s"
             % (rid, len(order), "" if len(order) == 1 else "s", inline_note, present_text(gate, state, chunks[order[0]]),
                gitignore_note(gate, state))), True
 
@@ -1423,8 +1425,8 @@ def finish_review(gate, state):
 # CLI commands (run by Claude through Bash)
 
 
-def cli_root():
-    root = find_root(os.getcwd()) or find_root(os.environ.get("CLAUDE_PROJECT_DIR"))
+def cli_root(root=None):
+    root = root or find_root(os.getcwd()) or find_root(os.environ.get("CLAUDE_PROJECT_DIR"))
     if not root:
         raise Refusal("comments-by-humans is off here: no %s/state.json above %s. The human starts it "
                       "with /comments-by-humans:build or /comments-by-humans:review." % (STATE_DIR, os.getcwd()))
@@ -1698,7 +1700,7 @@ Hook entry points (called by Claude Code):
 """
 
 
-def run_cli(argv):
+def run_cli(argv, root=None, fallback=True):
     if not argv or argv[0] in ("help", "-h", "--help"):
         print(USAGE)
         return 0
@@ -1708,7 +1710,10 @@ def run_cli(argv):
               % argv[0])
         return 1
     try:
-        root = cli_root()
+        if root and not fallback and not Gate(root).exists():
+            raise Refusal("comments-by-humans is off in %s. The human starts it with "
+                          "/comments-by-humans:build or /comments-by-humans:review." % root)
+        root = cli_root(root if root and Gate(root).exists() else None)
         gate = Gate(root)
         with gate:
             state = gate.load()
@@ -1727,13 +1732,31 @@ def run_cli(argv):
 
 
 def run_hook(name):
+    """Claude Code entry point: payload on stdin, Claude Code's output format on stdout."""
     raw = sys.stdin.read()
     payload = json.loads(raw) if raw.strip() else {}
+    try:
+        result = dispatch_hook(name, payload)
+    except Denied as e:
+        sys.stderr.write(str(e) + "\n")
+        sys.exit(2)
+    if not result:
+        return
+    if name == "post-write":
+        emit({"decision": "block", "reason": result})
+    elif name == "prompt-submit":
+        emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": result}})
+    elif name == "prompt-expansion":
+        sys.stdout.write(result + "\n")
+
+
+def dispatch_hook(name, payload, start=None):
+    """Run one hook. Raises Denied to block; returns a message for the assistant, or None."""
     if name == "prompt-expansion":
-        return hook_prompt_expansion(payload)
+        return hook_prompt_expansion(payload, start)
     if name == "prompt-submit":
-        return hook_prompt_submit(payload)
-    start = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
+        return hook_prompt_submit(payload, start)
+    start = start or os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd")
     root = find_root(start)
     if name == "pre-skill":
         return hook_pre_skill(root, payload)
@@ -1751,6 +1774,90 @@ def run_hook(name):
         if name == "post-write":
             return hook_post_write(gate, state, payload)
     raise ValueError("unknown hook %r" % name)
+
+
+# ---------------------------------------------------------------------------
+# Library API for other front ends, such as the model-agnostic agent in ../agent.
+# Same checks as the hooks; messages are translated to that front end's words.
+
+FRONTEND_WORDS = {
+    "agent": [(GATE + " ", "gate "), (GATE, "gate"), ("/comments-by-humans:", "/"),
+              ("Write or Edit", "write_file or edit_file"), ("Write and Edit", "write_file and edit_file")],
+    "claude-code": [],
+}
+
+
+def localize(text, frontend="agent"):
+    if not text:
+        return text
+    for old, new in FRONTEND_WORDS[frontend]:
+        text = text.replace(old, new)
+    return text
+
+
+def api_root(project):
+    """The directory that holds (or will hold) the project's .comments-by-humans/."""
+    return find_root(project, create=True)
+
+
+def api_state(root):
+    gate = Gate(root)
+    if not gate.exists():
+        return None
+    with gate:
+        return gate.load()
+
+
+def api_pre_tool(root, tool, tool_input, frontend="agent"):
+    """None when the tool call may run, else the reason it is denied. Fails closed."""
+    payload = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": tool_input, "cwd": root}
+    name = "pre-bash" if tool == "Bash" else "pre-skill" if tool == "Skill" else "pre-write"
+    try:
+        dispatch_hook(name, payload, start=root)
+    except Denied as e:
+        return localize(str(e), frontend)
+    except Exception as e:  # fail closed
+        return "comments-by-humans: internal error, failing closed: %s: %s" % (type(e).__name__, e)
+    return None
+
+
+def api_post_tool(root, tool, tool_input, frontend="agent"):
+    """After a write: register chunks, lock, re-gate. Returns a message for the assistant, or None."""
+    payload = {"hook_event_name": "PostToolUse", "tool_name": tool, "tool_input": tool_input, "cwd": root}
+    try:
+        return localize(dispatch_hook("post-write", payload, start=root), frontend)
+    except Exception as e:
+        return ("comments-by-humans: internal error after the write (%s: %s); the gate may not have "
+                "registered it. Stop and tell the human." % (type(e).__name__, e))
+
+
+def api_prompt(root, text, prompt_id, frontend="agent"):
+    """A message the human sent. Returns gate context for the assistant, or None."""
+    payload = {"hook_event_name": "UserPromptSubmit", "prompt": text, "prompt_id": prompt_id, "cwd": root}
+    return localize(dispatch_hook("prompt-submit", payload, start=root), frontend)
+
+
+def api_command(root, cmd, args="", frontend="agent"):
+    """A command the human typed: build, review or pause. Returns (text, ok)."""
+    gate = Gate(find_root(root, create=cmd in ("build", "review")) or root)
+    if not gate.exists() and cmd not in ("build", "review"):
+        return "comments-by-humans: the gate is off here; start it with %s or %s." % (
+            localize("/comments-by-humans:build", frontend), localize("/comments-by-humans:review", frontend)), False
+    with gate:
+        state = gate.load()
+        text, ok = run_command(gate, state, cmd, args, "human")
+        gate.save(state)
+    return localize(text, frontend), ok
+
+
+def api_cli(root, argv, frontend="agent"):
+    """Run a gate CLI command for the assistant. Returns (exit code, output)."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = run_cli(argv, root, fallback=False)
+    return code, localize(buf.getvalue().rstrip("\n"), frontend)
 
 
 def main(argv):

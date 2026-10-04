@@ -8,9 +8,14 @@
     {
       "name": "comments-by-humans",
       "source": "./comments-by-humans",
-      "description": "Claude writes the code; you explain it. A hook-enforced gate stops Claude after every chunk until your own comment above it passes a fixed rubric. Also reviews existing code one chunk at a time.",
+      "description": "The model writes the code; you explain it. A mechanical gate stops the assistant after every chunk until your own comment above it passes a fixed rubric. Runs in Claude Code, or as a standalone agent with any model.",
       "category": "learning",
-      "tags": ["learning", "code-review", "comments", "hooks"]
+      "tags": [
+        "learning",
+        "code-review",
+        "comments",
+        "hooks"
+      ]
     }
   ]
 }
