@@ -196,20 +196,29 @@ without the words What/Why/Connections/Catch as labels. Respond with JSON only, 
 "reply": <the chat message you send to the assistant>}}
 
 If the assistant asked you a follow-up question about the code in chat, answer it in "reply" and \
-usually leave the comment unchanged. If it asked a question about your comment, revise the comment."""
+usually leave the comment unchanged. If it asked a question about your comment, revise the comment. \
+You cannot run commands or open other files; if asked to check something, reason it out from the code \
+above and say what you concluded."""
 
 
 def learner(profile, ch, code, comment, message, submitted, model, setup=BUILD_SETUP):
     prompt = LEARNER_PROMPT.format(setup=setup, profile=profile, cid=ch["id"], attempt=submitted + 1,
                                    submitted=submitted, code=code,
                                    comment=json.dumps(comment or ""), message=message.strip())
-    with tempfile.TemporaryDirectory() as scratch:
-        data = claude(["--tools", "", "--model", model], prompt, scratch, timeout=300)
-    text = (data.get("result") or "").strip()
-    text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
-    m = re.search(r"\{.*\}", text, re.S)
-    result = json.loads(m.group(0) if m else text)
-    return result.get("comment"), result.get("reply") or "Done."
+    last_error = None
+    for _ in range(3):
+        with tempfile.TemporaryDirectory() as scratch:
+            data = claude(["--tools", "", "--model", model], prompt, scratch, timeout=300)
+        text = (data.get("result") or "").strip()
+        text = re.sub(r"^```(?:json)?|```$", "", text.strip()).strip()
+        m = re.search(r"\{.*\}", text, re.S)
+        try:
+            result = json.loads(m.group(0) if m else text)
+            return result.get("comment"), result.get("reply") or "Done."
+        except ValueError as e:
+            last_error = e
+            prompt += "\n\nYour previous answer was not valid JSON. Answer with the JSON object only."
+    raise RuntimeError("the learner model did not return JSON three times: %s" % last_error)
 
 
 def prepare(args):
