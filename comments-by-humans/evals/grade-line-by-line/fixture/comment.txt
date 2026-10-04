@@ -1,0 +1,1 @@
+Loops i over range(attempts). Calls fn and returns it. On Exception sleeps 2 ** i. After the loop raises RuntimeError.

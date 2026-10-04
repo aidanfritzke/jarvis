@@ -1,0 +1,12 @@
+{
+  "name": "comments-by-humans",
+  "displayName": "comments-by-humans",
+  "version": "0.1.0",
+  "description": "Claude writes the code; you explain it. A hook-enforced gate stops Claude after every chunk until your own comment above it passes a fixed rubric. Also reviews existing code one chunk at a time.",
+  "author": {
+    "name": "Aidan Fritzke"
+  },
+  "repository": "https://github.com/aidanfritzke/jarvis",
+  "license": "MIT",
+  "keywords": ["learning", "code-review", "comments", "hooks", "understanding"]
+}

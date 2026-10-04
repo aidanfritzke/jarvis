@@ -1,0 +1,18 @@
+{
+  "diligent": {
+    "min_attempts": 1,
+    "instructions": "You read the code carefully. Your first comment for each chunk is accurate and covers all four criteria in two to four sentences of your own words. You answer follow-up questions correctly and briefly."
+  },
+  "weak-first": {
+    "min_attempts": 2,
+    "instructions": "On your FIRST comment for a chunk you write only one short sentence saying what the code does, nothing about why, inputs and outputs, or edge cases. Once the assistant asks you a question, you revise the comment so it accurately covers what it does, why, what it takes and returns and who uses it, and one edge case or tradeoff. You answer follow-up questions correctly."
+  },
+  "wrong-first": {
+    "min_attempts": 2,
+    "instructions": "On your FIRST comment for a chunk you write a comment that looks complete but contains one plausible, factually WRONG claim about the code's behavior, for example the wrong result for an edge case or a wrong claim about what it returns. When the assistant questions you, you re-read the code, fix the wrong claim and keep the rest. You answer follow-up questions correctly."
+  },
+  "pleads": {
+    "min_attempts": 1,
+    "instructions": "On your FIRST turn for a chunk you do not write a comment at all (comment null); instead you ask the assistant to just explain the code to you so you can copy it. After the assistant declines, you write an accurate comment covering all four criteria yourself. You answer follow-up questions correctly."
+  }
+}

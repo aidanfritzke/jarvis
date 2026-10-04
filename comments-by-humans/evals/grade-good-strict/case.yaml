@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: grade-good-strict
+tags: [grading, good, strict]
+context:
+  scaffold_script: scaffold.sh
