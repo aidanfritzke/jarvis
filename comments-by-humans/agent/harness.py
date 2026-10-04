@@ -57,8 +57,9 @@ TEXT_PROTOCOL = """
 ## How to call tools
 
 This conversation has no built-in tool calling. To call a tool, write a tool block. You may write
-a short sentence before it. Write nothing after your last tool block: the agent runs the blocks in
-order and answers with their results. Without a tool block, your reply ends your turn.
+a short status phrase before it, such as "Reading the chunk.", but never a question for the human:
+questions go in your final reply. Write nothing after your last tool block: the agent runs the
+blocks in order and answers with their results. Without a tool block, your reply ends your turn.
 
 <tool name="read_file" path="src/app.py"/>
 

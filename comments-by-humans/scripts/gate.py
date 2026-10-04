@@ -1029,7 +1029,8 @@ def grading_context(gate, state, ch):
                  "A factually wrong claim fails it whatever else it covers. Length is not scored."
                  % (where(ch), "review" if review else "build"),
                  "If it falls short: ask exactly ONE question aimed at the weakest criterion, using "
-                 "%s (hint level %d of 3). Never state the answer, never rewrite or dictate the "
+                 "%s (hint level %d of 3). One question means one thing to answer, not alternatives "
+                 "joined by \"and\" or \"or\". Never state the answer, never rewrite or dictate the "
                  "comment, and never explain the code." % (hint_text, hint)]
         if depth == "strict" and followup is None:
             steps.append("If it meets the rubric: run `%s followup %s` first, then end your turn "
