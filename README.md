@@ -1,6 +1,4 @@
-# jarvis
-
-A Claude Code plugin marketplace.
+# comments-by-humans
 
 | Plugin | What it does |
 | --- | --- |
@@ -9,11 +7,11 @@ A Claude Code plugin marketplace.
 ## Install
 
 ```
-/plugin marketplace add aidanfritzke/jarvis
-/plugin install comments-by-humans@jarvis
+/plugin marketplace add aidanfritzke/comments-by-humans
+/plugin install comments-by-humans@jarvis (WRONG)
 ```
 
-To use a branch before it is merged, pin it when adding the marketplace, for example `aidanfritzke/jarvis#jarvis-comments-by-humans-model-agnostic`.
+To use a branch before it is merged, pin it when adding the marketplace, for example `aidanfritzke/jarvis#jarvis-comments-by-humans-model-agnostic`. (WRONG)
 
 For any other model, run the standalone agent: `python3 comments-by-humans/agent/cbh.py --help`.
 
